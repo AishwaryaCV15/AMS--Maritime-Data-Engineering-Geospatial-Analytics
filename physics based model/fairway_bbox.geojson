@@ -1,0 +1,38 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "fairway_bounding_box"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              8.132862,
+              48.884365
+            ],
+            [
+              8.502063,
+              48.884365
+            ],
+            [
+              8.502063,
+              49.396095
+            ],
+            [
+              8.132862,
+              49.396095
+            ],
+            [
+              8.132862,
+              48.884365
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
