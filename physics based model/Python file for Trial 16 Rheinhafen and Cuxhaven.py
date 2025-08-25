@@ -814,27 +814,7 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         }
 
 
-    # Plot CTE
-    plt.figure(figsize=(10, 3))
-    plt.plot(cte_hist, label="Cross-Track Error (m)")
-    plt.xlabel("Time step")
-    plt.ylabel("CTE (m)")
-    plt.grid()
-    plt.legend()
-    plt.title("Cross-Track Error Over Time")
-    plt.tight_layout()
-    plt.show()
-
-    # Plot speed profile
-    plt.figure(figsize=(10, 3))
-    plt.plot([math.hypot(u, v) for u, v in zip(np.full_like(x_hist, params.u), np.zeros_like(x_hist))], label="Speed (m/s)")
-    plt.xlabel("Time step")
-    plt.ylabel("Speed (m/s)")
-    plt.grid()
-    plt.legend()
-    plt.title("Ship Speed Over Time")
-    plt.tight_layout()
-    plt.show()
+    
 
     return x_hist, y_hist, params, log_data
 
