@@ -43,14 +43,13 @@ LAT_EPS     = 1e-6     # latitude stop tolerance (~0.1 m)
 with open(POLYGONS_JSON, "r", encoding="utf-8") as f:
     polys_lonlat = json.load(f)     # [lon,lat]
 with open(PORTLINES_JSON, "r", encoding="utf-8") as f:
-    ports_lonlat = json.load(f)     # [lon,lat]
+    ports_latlon = json.load(f)     # [lon,lat]
 with open(RHEINHAFEN_CENTERLINE_JSON, "r", encoding="utf-8") as f:
     Rheinhafen_centerline_latlon = json.load(f)  # [lat,lon]
 with open(CUXHAVEN_CENTERLINE_JSON, "r", encoding="utf-8") as f:
     Cuxhaven_centerline_latlon = json.load(f)  # [lat,lon]
 
-# Convert portlines to [lat,lon]
-ports_latlon = {k: [(lat, lon) for (lon, lat) in seq] for k, seq in ports_lonlat.items()}
+
 
 
 # %% [markdown]
@@ -280,10 +279,121 @@ def point_in_port_polygons(latlon, polys_lonlat):
             return True, name
     return False, None
 
+def _nearest_end_towards_pl6(plN_latlon, pl6_latlon):
+    """Pick the endpoint of plN that's closer to pl6 (junction end)."""
+    pl6_line = latlon_to_linestring(pl6_latlon)
+    endA, endB = plN_latlon[0], plN_latlon[-1]
+    dA = pl6_line.distance(Point(endA[1], endA[0]))
+    dB = pl6_line.distance(Point(endB[1], endB[0]))
+    return endA if dA <= dB else endB
+
+def dedup_consecutive(seq, ndp=5, truncate=False):
+    """
+    Collapse consecutive duplicate coordinates after reducing precision.
+
+    seq: list of (lat, lon)
+    ndp: number of decimal places (default 5)
+    truncate: if True, truncate instead of round
+    """
+    if not seq:
+        return []
+
+    def clip(pt):
+        if truncate:
+            m = 10 ** ndp
+            return (math.trunc(pt[0] * m) / m, math.trunc(pt[1] * m) / m)
+        else:
+            return (round(pt[0], ndp), round(pt[1], ndp))
+
+    out = [clip(seq[0])]
+    last = out[0]
+    for x in seq[1:]:
+        cx = clip(x)
+        if cx != last:
+            out.append(cx)
+            last = cx
+    return out
+
+def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlon):
+    """Route entirely within the port network when both points are in polygons."""
+    start_in, start_name = point_in_port_polygons(START_LATLON, polys_lonlat)
+    end_in,   end_name   = point_in_port_polygons(END_LATLON,   polys_lonlat)
+    
+    if not (start_in and end_in):
+        raise ValueError("Both START and END must be in polygons for port-to-port routing")
+    
+
+    N = int(start_name.split("_")[-1])  # polygon_N -> N
+    M = int(end_name.split("_")[-1])
+
+    pl6 = ports_latlon["portline_6"]
+
+    if N == M:
+        # Same polygon: just move along portline_N
+        plN = ports_latlon[f"portline_{N}"]
+        start_on = nearest_point_on_line(plN, START_LATLON)
+        end_on   = nearest_point_on_line(plN, END_LATLON)
+        segN     = segment_along_line(plN, start_on, end_on)
+        route    = [START_LATLON] + segN[1:-1] + [END_LATLON]
+        return dedup_consecutive(route)
+    
+
+
+    # Different polygons: plN -> pl6 -> plM
+    plN = ports_latlon[f"portline_{N}"]
+    plM = ports_latlon[f"portline_{M}"]
+
+    # project START and END to their lines
+    start_on_plN = nearest_point_on_line(plN, START_LATLON)
+    end_on_plM   = nearest_point_on_line(plM, END_LATLON)
+
+    # choose the ends that connect to pl6
+    junc_N = _nearest_end_towards_pl6(plN, pl6)
+    junc_M = _nearest_end_towards_pl6(plM, pl6)
+
+    # travel along plN to pl6
+    segN = segment_along_line(plN, start_on_plN, junc_N)
+
+    # along pl6 between the two junctions (correct direction handled by segment_along_line)
+    join_on_pl6_from_N = nearest_point_on_line(pl6, junc_N)
+    join_on_pl6_to_M   = nearest_point_on_line(pl6, junc_M)
+    seg6 = segment_along_line(pl6, join_on_pl6_from_N, join_on_pl6_to_M)
+
+    # from pl6 into plM to END
+    segM = segment_along_line(plM, junc_M, end_on_plM)
+
+    if start_name == "polygon_6":
+        seg6_unfiltered = segment_along_line(pl6, join_on_pl6_from_N, join_on_pl6_to_M)
+        seg6 = [pt for pt in seg6_unfiltered if pt[1] <= segM[-1][1]]
+        return dedup_consecutive([START_LATLON] + seg6[1:] + segM[1:-1] + [END_LATLON])
+    
+    if end_name == "polygon_6":
+        seg6_unfiltered = segment_along_line(pl6, join_on_pl6_from_N, join_on_pl6_to_M)
+        seg6 = [pt for pt in seg6_unfiltered if pt[1] <= segN[-1][1]]
+        return dedup_consecutive([START_LATLON] + segN[1:] + seg6[1:] + [END_LATLON])
+    
+    if (start_name == "polygon_1" or start_name == "polygon_2" or start_name == "polygon_3") and (end_name == "polygon_1" or end_name == "polygon_2" or end_name == "polygon_3"):
+        
+        return dedup_consecutive([START_LATLON] + segN[1:] + segM[1:-1] + [END_LATLON])
+
+    
+        
+    
+    
+    
+
+    # assemble (avoid duplicating touching points)
+    route = [START_LATLON] + segN[1:] + seg6[1:] + segM[1:-1] + [END_LATLON]
+    return dedup_consecutive(route)
+
 def build_route_port_aware_Rhein(START_LATLON, END_LATLON,
                            polys_lonlat, ports_latlon, centerline_latlon):
     start_in, _ = point_in_port_polygons(START_LATLON, polys_lonlat)
     end_in,   _ = point_in_port_polygons(END_LATLON,   polys_lonlat)
+
+    # NEW: if both inside → stay on the port network only
+    if start_in and end_in:
+        return build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlon)
 
     # If end is inside a port polygon (and start is not), flip S/E temporarily
     flipped = end_in and not start_in
@@ -295,13 +405,7 @@ def build_route_port_aware_Rhein(START_LATLON, END_LATLON,
     # Reverse back if we flipped
     if flipped:
         route = route[::-1]
-
-        # optional: de-duplicate consecutive identical points after reversing
-        dedup = []
-        for pt in route:
-            if not dedup or pt != dedup[-1]:
-                dedup.append(pt)
-        route = dedup
+        route = dedup_consecutive(route)
 
     return route
 
@@ -316,12 +420,14 @@ def lineofsight_Cuxhaven(START_LATLON, END_LATLON, centerline_latlon):
     final_x = END_LATLON[0]
     final_y = END_LATLON[1]
     use_reverse = (final_y - initial_y) > 0
+    
 
     y_min = min(initial_y, final_y)
     y_max = max(initial_y, final_y)
 
     simulation_path = [START_LATLON]
     if use_reverse:
+        
         centerline_latlon = centerline_latlon[::-1]
     
     simulation_path.extend(
@@ -329,7 +435,7 @@ def lineofsight_Cuxhaven(START_LATLON, END_LATLON, centerline_latlon):
          if y_min <= pt[1] <= y_max]
     )
     simulation_path.append(END_LATLON)
-    return simulation_path
+    return dedup_consecutive(simulation_path)
 
 # %% [markdown]
 # ### Load the parameters
@@ -580,6 +686,7 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         
         distance_to_goal = geodesic((params.x, params.y), final_point).meters
         if distance_to_goal < 30:
+            
             break
 
         if step >= max_steps:
@@ -693,6 +800,9 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         ):
             ref_idx += 1
             current_ref = simulation_path[ref_idx]
+        
+        
+
 
         log_data[step] = {
             "timestamp": time_elapsed_sec,
@@ -702,6 +812,29 @@ def simulate_motion(params, simulation_path, final_x, final_y):
             "y_velocity": params.u * np.sin(params.psi) + params.v * np.cos(params.psi),
             "heading": np.degrees(params.psi) % 360,
         }
+
+
+    # Plot CTE
+    plt.figure(figsize=(10, 3))
+    plt.plot(cte_hist, label="Cross-Track Error (m)")
+    plt.xlabel("Time step")
+    plt.ylabel("CTE (m)")
+    plt.grid()
+    plt.legend()
+    plt.title("Cross-Track Error Over Time")
+    plt.tight_layout()
+    plt.show()
+
+    # Plot speed profile
+    plt.figure(figsize=(10, 3))
+    plt.plot([math.hypot(u, v) for u, v in zip(np.full_like(x_hist, params.u), np.zeros_like(x_hist))], label="Speed (m/s)")
+    plt.xlabel("Time step")
+    plt.ylabel("Speed (m/s)")
+    plt.grid()
+    plt.legend()
+    plt.title("Ship Speed Over Time")
+    plt.tight_layout()
+    plt.show()
 
     return x_hist, y_hist, params, log_data
 
@@ -737,11 +870,12 @@ endpoint2 = (49.06241185735494, 8.317942857252644)
 endpointcux1 = (53.8981733, 8.6948722)
 endpointcux2 = (53.8536148, 9.0010887)
 endpointcux3 = (53.84373588009833, 8.97434706875069)
+(49.01571883418478, 8.311517544508376)
 
 # %%
-START_LATLON =  startpointcux3
-END_LATLON   = endpointcux3
-Location = "Cuxhaven"
+START_LATLON =  startpoint5
+END_LATLON   = startpoint3
+Location = "Rheinhafen"
 
 if Location == "Rheinhafen":
     line = build_route_port_aware_Rhein(START_LATLON, END_LATLON,polys_lonlat, ports_latlon, Rheinhafen_centerline_latlon)
@@ -756,6 +890,9 @@ elif Location == "Cuxhaven":
 simulation_path = line
 
 
+
+
+
 # %%
 # Reduce the reference path
 reduced_path = simulation_path[::1]
@@ -763,11 +900,14 @@ reduced_path = simulation_path[::1]
 
 initial_heading_deg = (90-calculate_bearing([START_LATLON[0],START_LATLON[1]], reduced_path[1])) % 360
 
+
 # Initialize parameters
 params = ShipParameters(START_LATLON[0],START_LATLON[1], initial_heading_deg)
 
 # Run simulation
 x_traj, y_traj, final_params, log_data = simulate_motion(params, reduced_path, END_LATLON[0], END_LATLON[1])
+
+
 
 
 
