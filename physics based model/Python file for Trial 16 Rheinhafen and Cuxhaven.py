@@ -213,7 +213,6 @@ def lineofsightnopolygon(START_LATLON, END_LATLON, centerline_latlon):
 
     simulation_path = [START_LATLON]
     if use_reverse:
-        print("yes, reverse")
         centerline_latlon = centerline_latlon[::-1]
     
     simulation_path.extend(
@@ -236,7 +235,6 @@ def lineofsight(START_LATLON, END_LATLON,polys_lonlat, ports_latlon, centerline_
         route_filtered = lineofsightnopolygon(START_LATLON, END_LATLON,centerline_latlon)
     else:
         N = int(containing.split("_")[-1])
-        print(f"Start is in/near: {containing}  → using portline_{N}")
 
         # ---------- START → along portline_N to its junction with portline_6 ----------
         plN = ports_latlon[f"portline_{N}"]
@@ -324,7 +322,6 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
     """Route entirely within the port network when both points are in polygons."""
     start_in, start_name = point_in_port_polygons(START_LATLON, polys_lonlat)
     end_in,   end_name   = point_in_port_polygons(END_LATLON,   polys_lonlat)
-    print(f"Both points in polygons: START in {start_name}, END in {end_name}")
     if not (start_in and end_in):
         raise ValueError("Both START and END must be in polygons for port-to-port routing")
     
@@ -333,6 +330,7 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
     M = int(end_name.split("_")[-1])
 
     pl6 = ports_latlon["portline_6"]
+    pl6_reverse = pl6[::-1]
 
     if N == M:
         # Same polygon: just move along portline_N
@@ -388,11 +386,7 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
         
         return dedup_consecutive([START_LATLON] + segN[1:] + segM[1:-1] + [END_LATLON])
 
-    
-        
-    
-    
-    print("lat point",segM[-1][1])
+
 
     # assemble (avoid duplicating touching points)
     route = [START_LATLON] + segN[1:] + seg6[1:] + segM[1:-1] + [END_LATLON]
@@ -465,15 +459,12 @@ def lineofsight_Cuxhaven(START_LATLON, END_LATLON, centerline_latlon):
     final_x = END_LATLON[0]
     final_y = END_LATLON[1]
     use_reverse = (final_y - initial_y) > 0
-    print(final_y-initial_y)
-    print(use_reverse)
 
     y_min = min(initial_y, final_y)
     y_max = max(initial_y, final_y)
 
     simulation_path = [START_LATLON]
     if use_reverse:
-        print("yes, reverse")
         centerline_latlon = centerline_latlon[::-1]
     
     simulation_path.extend(
@@ -482,6 +473,12 @@ def lineofsight_Cuxhaven(START_LATLON, END_LATLON, centerline_latlon):
     )
     simulation_path.append(END_LATLON)
     return dedup_consecutive(simulation_path)
+
+def latlon_to_xy(lat, lon):
+        R = 6371000
+        x = math.radians(lon) * R * math.cos(math.radians(lat))
+        y = math.radians(lat) * R
+        return x, y
 
 def signed_cte_to_segment(point_latlon, seg_a_latlon, seg_b_latlon):
     """
@@ -694,12 +691,6 @@ def calculate_bearing(pointA, pointB):
     bearing = math.atan2(x, y)
     return (math.degrees(bearing) + 360) % 360
 
-def latlon_to_xy(lat, lon):
-        R = 6371000
-        x = math.radians(lon) * R * math.cos(math.radians(lat))
-        y = math.radians(lat) * R
-        return x, y
-
 # REPLACE your get_wind_data() with this
 def get_wind_data(lat, lon, api_key, _cache={"t": -1, "val": (0.0, 0.0)}):
     """
@@ -766,11 +757,9 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         
         distance_to_goal = geodesic((params.x, params.y), final_point).meters
         if distance_to_goal < 30:
-            print(f"Reached goal within 5m at step {step}, time {time_elapsed_sec:.1f}s")
             break
 
         if step >= max_steps:
-            print("Max step limit reached.")
             break
 
         step += 1
@@ -882,13 +871,6 @@ def simulate_motion(params, simulation_path, final_x, final_y):
             ref_idx += 1
             current_ref = simulation_path[ref_idx]
         
-        #print(f"time: {time_elapsed_sec:.2f}s,  XP: {Fp:.2f}, Drag: {Fd:.2f},rudder forces: {XR , YR, NR}, wind forces: {Xw, Yw, Nw}, Speed: {params.u:.2f},asurge : {a_surge}, n : {params.n:.2f}, nrpm: {params.n_rpm:.2f}, rudder angle: {rudder_angle:.2f} deg, CTE: {cte:.2f}, Heading error: {heading_error:.2f} deg")
-        #print(f"time", time_elapsed_sec, "s, cte", cte, "m, heading error", heading_error, "deg, reference", ref_idx, "at", current_ref, "distance to ref", distance_to_ref, "m, speed", params.u, "m/s, rudder angle", np.degrees(params.delta), "deg")
-
-        """if time_elapsed_sec>11000:
-            print(time_elapsed_sec, rudder_angle, cte, current_heading)"""
-        if step % 1000 == 0:
-            print(f"time: {time_elapsed_sec}")
 
         log_data[step] = {
             "timestamp": time_elapsed_sec,
@@ -967,10 +949,8 @@ if Location == "Rheinhafen":
     line = build_route_port_aware_Rhein(START_LATLON, END_LATLON,polys_lonlat, ports_latlon, Rheinhafen_centerline_latlon)
 elif Location == "Cuxhaven":
     line =  lineofsight_Cuxhaven(START_LATLON, END_LATLON, Cuxhaven_centerline_latlon)
-print("Line of sight route:", line)
 
 cte0 = first_cte(START_LATLON, line)
-print(f"First CTE at start: {cte0:.2f} m")
 line.remove(line[0])
 line.remove(line[-2])
 line.remove(line[-1])
@@ -984,9 +964,7 @@ if Location == "Rheinhafen":
     line_offset = [START_LATLON] + offset_polyline_latlon(line, offset_m=abs(20), side="right") + [END_LATLON]
 elif Location == "Cuxhaven":
     line_offset = [START_LATLON] + offset_polyline_latlon(line, offset_m=abs(cte0), side=side) + [END_LATLON]
-print("Offset route:", line_offset)
 line_original = [START_LATLON] + line + [END_LATLON]
-print("Original route:", line_original)
 
 
 
@@ -994,20 +972,13 @@ print("Original route:", line_original)
 
 simulation_path = line_offset
 
-# Optional: Show number of points and first few
 
-print(f"Total points in simulation_path: {len(simulation_path)}")
-print("First 3 points:", simulation_path[:3])
 
 # %%
 # Reduce the reference path
 reduced_path = simulation_path[::1]
-print(reduced_path[0])  # Every alternate point
 
 initial_heading_deg = (90-calculate_bearing([START_LATLON[0],START_LATLON[1]], reduced_path[1])) % 360
-print(calculate_bearing([START_LATLON[0],START_LATLON[1]], reduced_path[1]))
-print(reduced_path[1])
-print(f"Initial heading: {initial_heading_deg:.2f}°")
 
 # Initialize parameters
 params = ShipParameters(START_LATLON[0],START_LATLON[1], initial_heading_deg)
@@ -1017,11 +988,6 @@ x_traj, y_traj, final_params, log_data = simulate_motion(params, reduced_path, E
 
 
 
-# Print final result
-"""print(f"Final Position: ({final_params.x:.6f}, {final_params.y:.6f})")
-print(f"Final Speed: {final_params.u:.2f} m/s")"""
-print(f"Final Heading: {np.degrees(final_params.psi)%360:.2f}°")
-print(final_params.r)
 
 # %% [markdown]
 # ### Ploting the position using Folium
@@ -1070,17 +1036,11 @@ for idx, point in enumerate(simulation_path):
 # 7. Display the map
 m
 
-# %%
-for step in sorted(log_data):
-    if step % 500 == 0:
-        print(f"Step {step}:", log_data[step])
-    if step == 1:
-        print(f"Step {step}:", log_data[step])
 
 
 
-# %%
-import json
+
+
 
 # Save to JSON file
 with open("log_data.json", "w") as f:
