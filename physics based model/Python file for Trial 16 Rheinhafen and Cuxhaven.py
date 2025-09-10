@@ -17,6 +17,10 @@ import requests
 from shapely.geometry import Point, Polygon, LineString
 from shapely.ops import substring, nearest_points
 from IPython.display import display
+from shapely.geometry import LineString, MultiLineString
+from shapely.ops import transform
+from shapely.geometry import JOIN_STYLE
+from pyproj import Transformer
 
 # %% [markdown]
 # ### Load Line of Sight
@@ -318,7 +322,6 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
     """Route entirely within the port network when both points are in polygons."""
     start_in, start_name = point_in_port_polygons(START_LATLON, polys_lonlat)
     end_in,   end_name   = point_in_port_polygons(END_LATLON,   polys_lonlat)
-    
     if not (start_in and end_in):
         raise ValueError("Both START and END must be in polygons for port-to-port routing")
     
@@ -327,6 +330,7 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
     M = int(end_name.split("_")[-1])
 
     pl6 = ports_latlon["portline_6"]
+    pl6_reverse = pl6[::-1]
 
     if N == M:
         # Same polygon: just move along portline_N
@@ -364,23 +368,25 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
 
     if start_name == "polygon_6":
         seg6_unfiltered = segment_along_line(pl6, join_on_pl6_from_N, join_on_pl6_to_M)
-        seg6 = [pt for pt in seg6_unfiltered if pt[1] <= segM[-1][1]]
+        if END_LATLON[1] > START_LATLON[1]:
+            seg6 = [pt for pt in pl6_reverse if pt[1] >= START_LATLON[1]]
+        else:       
+            seg6 = [pt for pt in pl6 if pt[1] <= START_LATLON[1]]
         return dedup_consecutive([START_LATLON] + seg6[1:] + segM[1:-1] + [END_LATLON])
     
     if end_name == "polygon_6":
         seg6_unfiltered = segment_along_line(pl6, join_on_pl6_from_N, join_on_pl6_to_M)
-        seg6 = [pt for pt in seg6_unfiltered if pt[1] <= segN[-1][1]]
+        if END_LATLON[1] > START_LATLON[1]:
+            seg6 = [pt for pt in pl6_reverse if pt[1] <= END_LATLON[1]]
+        else:
+            seg6 = [pt for pt in pl6 if pt[1] >= END_LATLON[1]]
         return dedup_consecutive([START_LATLON] + segN[1:] + seg6[1:] + [END_LATLON])
     
     if (start_name == "polygon_1" or start_name == "polygon_2" or start_name == "polygon_3") and (end_name == "polygon_1" or end_name == "polygon_2" or end_name == "polygon_3"):
         
         return dedup_consecutive([START_LATLON] + segN[1:] + segM[1:-1] + [END_LATLON])
 
-    
-        
-    
-    
-    
+
 
     # assemble (avoid duplicating touching points)
     route = [START_LATLON] + segN[1:] + seg6[1:] + segM[1:-1] + [END_LATLON]
@@ -409,6 +415,39 @@ def build_route_port_aware_Rhein(START_LATLON, END_LATLON,
 
     return route
 
+def offset_polyline_latlon(seq_latlon, offset_m=30.0, side="left"):
+    """
+    Offset a [lat,lon] polyline by `offset_m` meters to the 'left' or 'right'
+    (left/right is with respect to the vertex order). Returns a [lat,lon] list.
+    """
+    # 1) Build LineString in (lon, lat) order for Shapely
+    line_ll = LineString([(lon, lat) for (lat, lon) in seq_latlon])
+
+    # 2) Choose a metric CRS (UTM32N for ~8E, 49N)
+    #    If you want automatic zone selection, compute from mean lon.
+    transformer_fwd = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True)
+    transformer_inv = Transformer.from_crs("EPSG:32632", "EPSG:4326", always_xy=True)
+
+    to_utm   = lambda x, y, z=None: transformer_fwd.transform(x, y)
+    to_wgs84 = lambda x, y, z=None: transformer_inv.transform(x, y)
+
+    # 3) Project to meters, offset, and pick the longest piece if it splits
+    line_xy = transform(to_utm, line_ll)
+    off = line_xy.parallel_offset(
+        distance=offset_m,
+        side=side,                   # 'left' or 'right'
+        join_style=JOIN_STYLE.round, # smoother corners; try .mitre or .bevel if you prefer
+        resolution=16                # higher = smoother arcs around bends
+    )
+
+    if isinstance(off, MultiLineString):
+        # pick the longest piece to preserve the main shape
+        off = max(off.geoms, key=lambda g: g.length)
+
+    # 4) Back to WGS84 and return as [lat,lon]
+    off_ll = transform(to_wgs84, off)
+    return [(lat, lon) for (lon, lat) in off_ll.coords]
+
 def lineofsight_Cuxhaven(START_LATLON, END_LATLON, centerline_latlon):
     """
     Build a line of sight from START to END without considering polygons.
@@ -420,14 +459,12 @@ def lineofsight_Cuxhaven(START_LATLON, END_LATLON, centerline_latlon):
     final_x = END_LATLON[0]
     final_y = END_LATLON[1]
     use_reverse = (final_y - initial_y) > 0
-    
 
     y_min = min(initial_y, final_y)
     y_max = max(initial_y, final_y)
 
     simulation_path = [START_LATLON]
     if use_reverse:
-        
         centerline_latlon = centerline_latlon[::-1]
     
     simulation_path.extend(
@@ -436,6 +473,46 @@ def lineofsight_Cuxhaven(START_LATLON, END_LATLON, centerline_latlon):
     )
     simulation_path.append(END_LATLON)
     return dedup_consecutive(simulation_path)
+
+def latlon_to_xy(lat, lon):
+        R = 6371000
+        x = math.radians(lon) * R * math.cos(math.radians(lat))
+        y = math.radians(lat) * R
+        return x, y
+
+def signed_cte_to_segment(point_latlon, seg_a_latlon, seg_b_latlon):
+    """
+    Cross-track error (meters) from point to the infinite line through seg_a->seg_b,
+    with sign from the 2D cross product (left/right of segment direction).
+    Uses your latlon_to_xy() planar helper.
+    """
+    px, py = latlon_to_xy(point_latlon[0], point_latlon[1])
+    x1, y1 = latlon_to_xy(seg_a_latlon[0], seg_a_latlon[1])
+    x2, y2 = latlon_to_xy(seg_b_latlon[0], seg_b_latlon[1])
+
+    dx, dy = x2 - x1, y2 - y1
+    if dx == 0 and dy == 0:
+        return 0.0
+
+    # projection of P onto the (infinite) line AB
+    u = ((px - x1) * dx + (py - y1) * dy) / (dx*dx + dy*dy)
+    proj_x = x1 + u * dx
+    proj_y = y1 + u * dy
+
+    cte = math.hypot(px - proj_x, py - proj_y)
+    cross = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
+    return float(np.sign(cross)) * cte
+
+def first_cte(start_latlon, simulation_path):
+    """
+    Your 'first CTE' at step 0:
+    distance from START to the segment simulation_path[1] -> simulation_path[2].
+    """
+    if len(simulation_path) < 3:
+        raise ValueError("simulation_path must have at least 3 points")
+    p1 = simulation_path[1]
+    p2 = simulation_path[2]
+    return signed_cte_to_segment(start_latlon, p1, p2)
 
 # %% [markdown]
 # ### Load the parameters
@@ -614,12 +691,6 @@ def calculate_bearing(pointA, pointB):
     bearing = math.atan2(x, y)
     return (math.degrees(bearing) + 360) % 360
 
-def latlon_to_xy(lat, lon):
-        R = 6371000
-        x = math.radians(lon) * R * math.cos(math.radians(lat))
-        y = math.radians(lat) * R
-        return x, y
-
 # REPLACE your get_wind_data() with this
 def get_wind_data(lat, lon, api_key, _cache={"t": -1, "val": (0.0, 0.0)}):
     """
@@ -686,7 +757,6 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         
         distance_to_goal = geodesic((params.x, params.y), final_point).meters
         if distance_to_goal < 30:
-            
             break
 
         if step >= max_steps:
@@ -801,8 +871,6 @@ def simulate_motion(params, simulation_path, final_x, final_y):
             ref_idx += 1
             current_ref = simulation_path[ref_idx]
         
-        
-
 
         log_data[step] = {
             "timestamp": time_elapsed_sec,
@@ -814,7 +882,27 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         }
 
 
-    
+    # Plot CTE
+    plt.figure(figsize=(10, 3))
+    plt.plot(cte_hist, label="Cross-Track Error (m)")
+    plt.xlabel("Time step")
+    plt.ylabel("CTE (m)")
+    plt.grid()
+    plt.legend()
+    plt.title("Cross-Track Error Over Time")
+    plt.tight_layout()
+    plt.show()
+
+    # Plot speed profile
+    plt.figure(figsize=(10, 3))
+    plt.plot([math.hypot(u, v) for u, v in zip(np.full_like(x_hist, params.u), np.zeros_like(x_hist))], label="Speed (m/s)")
+    plt.xlabel("Time step")
+    plt.ylabel("Speed (m/s)")
+    plt.grid()
+    plt.legend()
+    plt.title("Ship Speed Over Time")
+    plt.tight_layout()
+    plt.show()
 
     return x_hist, y_hist, params, log_data
 
@@ -853,8 +941,8 @@ endpointcux3 = (53.84373588009833, 8.97434706875069)
 (49.01571883418478, 8.311517544508376)
 
 # %%
-START_LATLON =  startpoint5
-END_LATLON   = startpoint3
+START_LATLON =  startpoint3
+END_LATLON   = startpoint6
 Location = "Rheinhafen"
 
 if Location == "Rheinhafen":
@@ -862,14 +950,27 @@ if Location == "Rheinhafen":
 elif Location == "Cuxhaven":
     line =  lineofsight_Cuxhaven(START_LATLON, END_LATLON, Cuxhaven_centerline_latlon)
 
+cte0 = first_cte(START_LATLON, line)
+line.remove(line[0])
+line.remove(line[-2])
+line.remove(line[-1])
+
+if cte0 > 0:
+    side = "left"
+else:
+    side = "right"
+
+if Location == "Rheinhafen":
+    line_offset = [START_LATLON] + offset_polyline_latlon(line, offset_m=abs(20), side="right") + [END_LATLON]
+elif Location == "Cuxhaven":
+    line_offset = [START_LATLON] + offset_polyline_latlon(line, offset_m=abs(cte0), side=side) + [END_LATLON]
+line_original = [START_LATLON] + line + [END_LATLON]
 
 
 
 # %%
 
-simulation_path = line
-
-
+simulation_path = line_offset
 
 
 
@@ -877,16 +978,13 @@ simulation_path = line
 # Reduce the reference path
 reduced_path = simulation_path[::1]
 
-
 initial_heading_deg = (90-calculate_bearing([START_LATLON[0],START_LATLON[1]], reduced_path[1])) % 360
-
 
 # Initialize parameters
 params = ShipParameters(START_LATLON[0],START_LATLON[1], initial_heading_deg)
 
 # Run simulation
 x_traj, y_traj, final_params, log_data = simulate_motion(params, reduced_path, END_LATLON[0], END_LATLON[1])
-
 
 
 
@@ -941,8 +1039,8 @@ m
 
 
 
-# %%
-import json
+
+
 
 # Save to JSON file
 with open("log_data.json", "w") as f:
