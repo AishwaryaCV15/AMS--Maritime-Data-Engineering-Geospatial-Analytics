@@ -6,7 +6,7 @@ from retry_requests import retry
 
 class MarineWeatherFetcher:
     """
-    Fetches marine weather data for specific dates (Feb 6-7, 2025)
+    Fetches marine weather data for specific dates (Mar 9-15, 2025)
     """
 
     def __init__(self):
@@ -39,7 +39,7 @@ class MarineWeatherFetcher:
             return []
 
     def fetch_for_dates(self, coordinates: list):
-        """Fetch data for Feb 6-7, 2025 specifically"""
+        """Fetch data for Mar 9-15, 2025 specifically"""
         all_data = []
 
         # Define hourly parameters in specific order
@@ -60,8 +60,8 @@ class MarineWeatherFetcher:
 
         params = {
             "hourly": hourly_params,
-            "start_date": "2025-04-15",
-            "end_date": "2025-04-29",
+            "start_date": "2025-03-09",
+            "end_date": "2025-03-15",
         }
 
         for lat, lon in coordinates:
@@ -114,17 +114,17 @@ if __name__ == "__main__":
     fetcher = MarineWeatherFetcher()
 
     # Load coordinates (example: coords.csv with 'lat,lon' columns)
-    coordinates = fetcher.load_coordinates("openmeteo_query_points.csv")
+    coordinates = fetcher.load_coordinates("openmeteo_query_point_rhein.csv")
 
     if not coordinates:
         print("No valid coordinates found!")
     else:
-        # Fetch data for Feb 6-7, 2025
+        # Fetch data for Mar 9-15, 2025
         weather_data = fetcher.fetch_for_dates(coordinates)
 
         if not weather_data.empty:
             # Save to CSV
-            output_file = "weather_2025-04.csv"
+            output_file = "weather_2025-03_v2.csv"
             weather_data.to_csv(output_file, index=False)
             print(f"\n Saved data for {len(coordinates)} locations to {output_file}")
 

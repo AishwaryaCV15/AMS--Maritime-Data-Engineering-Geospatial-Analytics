@@ -6,7 +6,7 @@ from retry_requests import retry
 
 class MarineWeatherFetcher:
     """
-    Fetches marine weather data for specific dates ( 2025)
+    Fetches marine weather data for specific dates (Mar 9-15 2025)
     """
 
     def __init__(self):
@@ -52,8 +52,8 @@ class MarineWeatherFetcher:
                 "ocean_current_velocity",
                 "ocean_current_direction",
             ],
-            "start_date": "2025-04-15",
-            "end_date": "2025-04-29",
+            "start_date": "2025-03-09",
+            "end_date": "2025-03-15",
         }
 
         for lat, lon in coordinates:
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     fetcher = MarineWeatherFetcher()
 
     # Load coordinates (example: coords.csv with 'lat,lon' columns)
-    coordinates = fetcher.load_coordinates("openmeteo_query_points.csv")
+    coordinates = fetcher.load_coordinates("openmeteo_query_point_rhein.csv")
 
     if not coordinates:
         print("No valid coordinates found!")
@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
         if not marine_data.empty:
             # Save to CSV
-            output_file = "marine_weather_2025-04.csv"
+            output_file = "marine_weather_2025-03.csv"
             marine_data.to_csv(output_file, index=False)
             print(f"\n Saved data for {len(coordinates)} locations to {output_file}")
 

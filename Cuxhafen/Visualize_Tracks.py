@@ -32,7 +32,7 @@ def fetch_ais_data_from_db(db_config, mmsi=None):
         # Adjusted column names to exactly match the provided database schema (lowercase)
         # 'recv_time' is crucial for ordering the trajectory.
         query_cols = "`mmsi`, `latitude`, `longitude`, `sog`, `true_heading`, `recv_time` ,`datetime_utc`"
-        table_name = "rhein_ais_data_env"
+        table_name = "ais_environmental_enriched"
 
         query = f"""
         SELECT {query_cols}
@@ -41,7 +41,7 @@ def fetch_ais_data_from_db(db_config, mmsi=None):
         params = []
 
         if mmsi is not None:
-            query += " WHERE mmsi = %s  and recv_time between '2025-03-09 11:49:09' and '2025-03-09 12:22:27' "  # and datetime_utc between '2025-04-27 06:59:17' and  '2025-04-27 07:32:19'"  # and datetime_utc between '2025-04-20 01:07:37' and '2025-04-20 01:12:17'"
+            query += " WHERE mmsi = %s  "  # and recv_time between '2025-03-09 11:49:09' and '2025-03-09 12:22:27' "  # and datetime_utc between '2025-04-27 06:59:17' and  '2025-04-27 07:32:19'"  # and datetime_utc between '2025-04-20 01:07:37' and '2025-04-20 01:12:17'"
             params.append(mmsi)
 
         query += " ORDER BY `recv_time` ASC;"
@@ -295,7 +295,7 @@ if __name__ == "__main__":
         "database": "ship_data",
     }
 
-    target_mmsi = 244660532
+    target_mmsi = 212453000
 
     print("Starting data retrieval and plotting process...")
     ais_data_for_plot = fetch_ais_data_from_db(db_config, mmsi=target_mmsi)
@@ -309,9 +309,9 @@ if __name__ == "__main__":
 
         # Add static lines from your two JSON files
         json_files = [
-            "log_data S1 R Port.json",
-            "Rheinhafen_line_of_sight",
-            "portlines.json",
+            "C:/Users/cvais/Documents/GitHub/AMS_ShipTraj/log_data-S2 up.json",
+            "C:/Users/cvais/Documents/GitHub/AMS_ShipTraj/log_data-S3 up.json",
+            "C:/Users/cvais/Documents/GitHub/AMS_ShipTraj/Cuxhaven_line_of_sight.json",
         ]
         add_static_lines_from_json_files(json_files, folium_map)
 
