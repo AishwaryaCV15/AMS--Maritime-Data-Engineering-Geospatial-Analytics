@@ -27,27 +27,34 @@ from pyproj import Transformer
 
 # %%
 # ---------------- CONFIG ----------------
-POLYGONS_JSON   = "data/polygons.json"            # {"polygon_1":[[lon,lat],...], ... "polygon_5":[...]}
-PORTLINES_JSON  = "data/portlines.json"           # {"portline_1":[[lon,lat],...], ..., "portline_6":[...]}
-RHEINHAFEN_CENTERLINE_JSON = "data/Rheinhafen_line_of_sight.json"   # [[lat,lon], ...]  (already lat,lon)
-CUXHAVEN_CENTERLINE_JSON = "data/Cuxhaven_line_of_sight.json"  # [[lat,lon], ...] (already lat,lon)
+POLYGONS_JSON = (
+    "Data/polygons.json"  # {"polygon_1":[[lon,lat],...], ... "polygon_5":[...]}
+)
+PORTLINES_JSON = (
+    "Data/portlines.json"  # {"portline_1":[[lon,lat],...], ..., "portline_6":[...]}
+)
+RHEINHAFEN_CENTERLINE_JSON = (
+    "Data/Rheinhafen_line_of_sight.json"  # [[lat,lon], ...]  (already lat,lon)
+)
+CUXHAVEN_CENTERLINE_JSON = (
+    "Data/Cuxhaven_line_of_sight.json"  # [[lat,lon], ...] (already lat,lon)
+)
 
 
 # small numeric tolerances
-ON_LINE_TOL = 2e-4     # ~20 m for "on the line" tests
-LAT_EPS     = 1e-6     # latitude stop tolerance (~0.1 m)
+ON_LINE_TOL = 2e-4  # ~20 m for "on the line" tests
+LAT_EPS = 1e-6  # latitude stop tolerance (~0.1 m)
 # ---------------------------------------
 
 
 # ---------- helpers ----------
 
 
-
 # ---------- load data ----------
 with open(POLYGONS_JSON, "r", encoding="utf-8") as f:
-    polys_lonlat = json.load(f)     # [lon,lat]
+    polys_lonlat = json.load(f)  # [lon,lat]
 with open(PORTLINES_JSON, "r", encoding="utf-8") as f:
-    ports_latlon = json.load(f)     # [lon,lat]
+    ports_latlon = json.load(f)  # [lon,lat]
 with open(RHEINHAFEN_CENTERLINE_JSON, "r", encoding="utf-8") as f:
     Rheinhafen_centerline_latlon = json.load(f)  # [lat,lon]
 with open(CUXHAVEN_CENTERLINE_JSON, "r", encoding="utf-8") as f:
@@ -57,10 +64,12 @@ with open(CUXHAVEN_CENTERLINE_JSON, "r", encoding="utf-8") as f:
 # %% [markdown]
 # ### Helper function for line of sight
 
+
 # %%
 def latlon_to_linestring(seq_latlon):
     """Convert [[lat,lon], ...] to shapely LineString (x=lon, y=lat)."""
     return LineString([(lon, lat) for (lat, lon) in seq_latlon])
+
 
 def nearest_point_on_line(seq_latlon, ref_latlon):
     """Nearest point on a polyline (returned as [lat,lon])."""
@@ -69,14 +78,15 @@ def nearest_point_on_line(seq_latlon, ref_latlon):
     np = nearest_points(line, p)[0]
     return (np.y, np.x)
 
+
 def segment_along_line(seq_latlon, a_latlon, b_latlon):
     """
     Forward-only subline from a to b (projections along the polyline),
     includes exact endpoints, de-duplicates.
     """
     line = latlon_to_linestring(seq_latlon)
-    a_d  = line.project(Point(a_latlon[1], a_latlon[0]))
-    b_d  = line.project(Point(b_latlon[1], b_latlon[0]))
+    a_d = line.project(Point(a_latlon[1], a_latlon[0]))
+    b_d = line.project(Point(b_latlon[1], b_latlon[0]))
     if a_d <= b_d:
         seg = substring(line, a_d, b_d)
     else:
@@ -84,13 +94,16 @@ def segment_along_line(seq_latlon, a_latlon, b_latlon):
         seg = LineString(list(seg.coords)[::-1])
 
     coords = [(y, x) for (x, y) in seg.coords]
-    if not coords or coords[0] != a_latlon: coords = [a_latlon] + coords
-    if not coords or coords[-1] != b_latlon: coords = coords + [b_latlon]
+    if not coords or coords[0] != a_latlon:
+        coords = [a_latlon] + coords
+    if not coords or coords[-1] != b_latlon:
+        coords = coords + [b_latlon]
     out = []
     for p in coords:
         if not out or p != out[-1]:
             out.append(p)
     return out
+
 
 def pick_prev_centerline_vertex(centerline_latlon, join_latlon, end_latlon):
     """
@@ -100,29 +113,32 @@ def pick_prev_centerline_vertex(centerline_latlon, join_latlon, end_latlon):
     cl_line = latlon_to_linestring(centerline_latlon)
     L = cl_line.length
     dj = cl_line.project(Point(join_latlon[1], join_latlon[0]))
-    de = cl_line.project(Point(end_latlon[1],  end_latlon[0]))
+    de = cl_line.project(Point(end_latlon[1], end_latlon[0]))
 
     # keep de strictly inside (avoid snapping to endpoints)
     eps = 1e-9 * L if L > 0 else 0.0
-    if de <= eps:     de = min(eps*10, L/1000.0)
-    if de >= L - eps: de = max(L - eps*10, L - L/1000.0)
+    if de <= eps:
+        de = min(eps * 10, L / 1000.0)
+    if de >= L - eps:
+        de = max(L - eps * 10, L - L / 1000.0)
 
     forward = de >= dj
     cl_dists = [cl_line.project(Point(pt[1], pt[0])) for pt in centerline_latlon]
 
     prev_idx = None
     for i in range(len(cl_dists) - 1):
-        a, b = cl_dists[i], cl_dists[i+1]
+        a, b = cl_dists[i], cl_dists[i + 1]
         if a <= de <= b:
-            prev_idx = i if forward else i+1
+            prev_idx = i if forward else i + 1
             break
         if b <= de <= a:
-            prev_idx = i+1 if forward else i
+            prev_idx = i + 1 if forward else i
             break
 
     if prev_idx is None:
         prev_idx = len(centerline_latlon) - 2 if forward else 1
     return centerline_latlon[prev_idx]
+
 
 def splice_pl6_to_centerline(pl6_latlon, centerline_latlon, join_on_pl6):
     """
@@ -131,14 +147,15 @@ def splice_pl6_to_centerline(pl6_latlon, centerline_latlon, join_on_pl6):
     Returns (p6_splice_latlon, cl_splice_latlon).
     """
     pl6_line = latlon_to_linestring(pl6_latlon)
-    cl_line  = latlon_to_linestring(centerline_latlon)
-    inter    = pl6_line.intersection(cl_line)
-    join_d   = pl6_line.project(Point(join_on_pl6[1], join_on_pl6[0]))
+    cl_line = latlon_to_linestring(centerline_latlon)
+    inter = pl6_line.intersection(cl_line)
+    join_d = pl6_line.project(Point(join_on_pl6[1], join_on_pl6[0]))
 
     candidates_on_pl6 = []
 
     def add_candidate(pt):
-        if pt.is_empty: return
+        if pt.is_empty:
+            return
         if isinstance(pt, Point):
             candidates_on_pl6.append((pt.y, pt.x))
         elif hasattr(pt, "geoms"):  # MultiPoint/GeometryCollection
@@ -157,6 +174,7 @@ def splice_pl6_to_centerline(pl6_latlon, centerline_latlon, join_on_pl6):
         def forward_dist(latlon):
             d = pl6_line.project(Point(latlon[1], latlon[0]))
             return d - join_d if d >= join_d else float("inf")
+
         p6_splice = min(candidates_on_pl6, key=forward_dist)
         if forward_dist(p6_splice) == float("inf"):
             q6, qc = nearest_points(pl6_line, cl_line)
@@ -167,6 +185,7 @@ def splice_pl6_to_centerline(pl6_latlon, centerline_latlon, join_on_pl6):
         q6, qc = nearest_points(pl6_line, cl_line)
         return (q6.y, q6.x), (qc.y, qc.x)
 
+
 def trim_centerline_by_end_lat(seg_latlon, end_lat):
     """
     Given a centerline segment seg_latlon ([lat,lon] from start→end),
@@ -176,13 +195,14 @@ def trim_centerline_by_end_lat(seg_latlon, end_lat):
         return seg_latlon
 
     lat0, lat1 = seg_latlon[0][0], seg_latlon[-1][0]
-    lat_increasing = (lat1 >= lat0)
+    lat_increasing = lat1 >= lat0
 
     out = []
     for pt in seg_latlon:
         lat = pt[0]
-        passed = (lat_increasing and lat >  end_lat + LAT_EPS) or \
-                 (not lat_increasing and lat < end_lat - LAT_EPS)
+        passed = (lat_increasing and lat > end_lat + LAT_EPS) or (
+            not lat_increasing and lat < end_lat - LAT_EPS
+        )
         out.append(pt)
         if passed:
             out.pop()  # drop the point that crossed the latitude
@@ -193,6 +213,7 @@ def trim_centerline_by_end_lat(seg_latlon, end_lat):
     if not out:
         out = [seg_latlon[0]]
     return out
+
 
 def lineofsightnopolygon(START_LATLON, END_LATLON, centerline_latlon):
     """
@@ -213,14 +234,14 @@ def lineofsightnopolygon(START_LATLON, END_LATLON, centerline_latlon):
     if use_reverse:
         centerline_latlon = centerline_latlon[::-1]
 
-    simulation_path.extend(
-        [pt for pt in centerline_latlon
-         if x_min <= pt[0] <= x_max]
-    )
+    simulation_path.extend([pt for pt in centerline_latlon if x_min <= pt[0] <= x_max])
     simulation_path.append(END_LATLON)
     return simulation_path
 
-def lineofsight(START_LATLON, END_LATLON,polys_lonlat, ports_latlon, centerline_latlon):
+
+def lineofsight(
+    START_LATLON, END_LATLON, polys_lonlat, ports_latlon, centerline_latlon
+):
     # ---------- choose portline_N from START polygon ----------
     p_start = Point(START_LATLON[1], START_LATLON[0])
     containing, nearest_name, nearest_d = None, None, float("inf")
@@ -230,7 +251,9 @@ def lineofsight(START_LATLON, END_LATLON,polys_lonlat, ports_latlon, centerline_
             containing = name
             break
     if containing is None:
-        route_filtered = lineofsightnopolygon(START_LATLON, END_LATLON,centerline_latlon)
+        route_filtered = lineofsightnopolygon(
+            START_LATLON, END_LATLON, centerline_latlon
+        )
     else:
         N = int(containing.split("_")[-1])
 
@@ -243,34 +266,45 @@ def lineofsight(START_LATLON, END_LATLON,polys_lonlat, ports_latlon, centerline_
         # choose plN endpoint closer to pl6 as the junction end
         pl6_line = latlon_to_linestring(pl6)
         endA, endB = plN[0], plN[-1]
-        junc_end = endA if pl6_line.distance(Point(endA[1], endA[0])) <= pl6_line.distance(Point(endB[1], endB[0])) else endB
+        junc_end = (
+            endA
+            if pl6_line.distance(Point(endA[1], endA[0]))
+            <= pl6_line.distance(Point(endB[1], endB[0]))
+            else endB
+        )
 
         start_on_plN = nearest_point_on_line(plN, START_LATLON)
-        plN_segment   = segment_along_line(plN, start_on_plN, junc_end)
+        plN_segment = segment_along_line(plN, start_on_plN, junc_end)
         plN_segment.remove(plN_segment[0])  # remove the first point (START_LATLON)
 
-
-
-
         # exact join point on pl6
-        join_on_pl6   = nearest_point_on_line(pl6, junc_end)
+        join_on_pl6 = nearest_point_on_line(pl6, junc_end)
 
         # ---------- along portline_6 to a good splice with the centerline ----------
-        p6_splice, cl_splice = splice_pl6_to_centerline(pl6, centerline_latlon, join_on_pl6)
+        p6_splice, cl_splice = splice_pl6_to_centerline(
+            pl6, centerline_latlon, join_on_pl6
+        )
         pl6_leg = segment_along_line(pl6, join_on_pl6, p6_splice)
 
         # ---------- centerline to the 'previous' vertex, trimmed by END latitude, then straight to END ----------
-        prev_point = pick_prev_centerline_vertex(centerline_latlon, cl_splice, END_LATLON)
-        cl_leg     = segment_along_line(centerline_latlon, cl_splice, prev_point)
-        cl_leg     = trim_centerline_by_end_lat(cl_leg, END_LATLON[0])  # << trim-by-lat rule
+        prev_point = pick_prev_centerline_vertex(
+            centerline_latlon, cl_splice, END_LATLON
+        )
+        cl_leg = segment_along_line(centerline_latlon, cl_splice, prev_point)
+        cl_leg = trim_centerline_by_end_lat(
+            cl_leg, END_LATLON[0]
+        )  # << trim-by-lat rule
 
         last_on_cl = cl_leg[-1] if cl_leg else cl_splice
-        final_leg  = [last_on_cl, END_LATLON]
+        final_leg = [last_on_cl, END_LATLON]
 
         # ---------- assemble final route ----------
-        route_unfiltered = [START_LATLON] + plN_segment + pl6_leg[1:] + cl_leg[1:] + final_leg
+        route_unfiltered = (
+            [START_LATLON] + plN_segment + pl6_leg[1:] + cl_leg[1:] + final_leg
+        )
         route_filtered = [pt for pt in route_unfiltered if pt[1] <= START_LATLON[1]]
     return route_filtered
+
 
 def point_in_port_polygons(latlon, polys_lonlat):
     """Return (True, name) if (lat,lon) is inside/touching any polygon; else (False, None)."""
@@ -290,6 +324,7 @@ def _nearest_end_towards_pl6(plN_latlon, pl6_latlon):
     dB = pl6_line.distance(Point(endB[1], endB[0]))
     return endA if dA <= dB else endB
 
+
 def dedup_consecutive(seq, ndp=5, truncate=False):
     """
     Collapse consecutive duplicate coordinates after reducing precision.
@@ -303,7 +338,7 @@ def dedup_consecutive(seq, ndp=5, truncate=False):
 
     def clip(pt):
         if truncate:
-            m = 10 ** ndp
+            m = 10**ndp
             return (math.trunc(pt[0] * m) / m, math.trunc(pt[1] * m) / m)
         else:
             return (round(pt[0], ndp), round(pt[1], ndp))
@@ -317,13 +352,15 @@ def dedup_consecutive(seq, ndp=5, truncate=False):
             last = cx
     return out
 
+
 def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlon):
     """Route entirely within the port network when both points are in polygons."""
     start_in, start_name = point_in_port_polygons(START_LATLON, polys_lonlat)
-    end_in,   end_name   = point_in_port_polygons(END_LATLON,   polys_lonlat)
+    end_in, end_name = point_in_port_polygons(END_LATLON, polys_lonlat)
     if not (start_in and end_in):
-        raise ValueError("Both START and END must be in polygons for port-to-port routing")
-
+        raise ValueError(
+            "Both START and END must be in polygons for port-to-port routing"
+        )
 
     N = int(start_name.split("_")[-1])  # polygon_N -> N
     M = int(end_name.split("_")[-1])
@@ -335,12 +372,10 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
         # Same polygon: just move along portline_N
         plN = ports_latlon[f"portline_{N}"]
         start_on = nearest_point_on_line(plN, START_LATLON)
-        end_on   = nearest_point_on_line(plN, END_LATLON)
-        segN     = segment_along_line(plN, start_on, end_on)
-        route    = [START_LATLON] + segN[1:-1] + [END_LATLON]
+        end_on = nearest_point_on_line(plN, END_LATLON)
+        segN = segment_along_line(plN, start_on, end_on)
+        route = [START_LATLON] + segN[1:-1] + [END_LATLON]
         return dedup_consecutive(route)
-
-
 
     # Different polygons: plN -> pl6 -> plM
     plN = ports_latlon[f"portline_{N}"]
@@ -348,7 +383,7 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
 
     # project START and END to their lines
     start_on_plN = nearest_point_on_line(plN, START_LATLON)
-    end_on_plM   = nearest_point_on_line(plM, END_LATLON)
+    end_on_plM = nearest_point_on_line(plM, END_LATLON)
 
     # choose the ends that connect to pl6
     junc_N = _nearest_end_towards_pl6(plN, pl6)
@@ -359,7 +394,7 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
 
     # along pl6 between the two junctions (correct direction handled by segment_along_line)
     join_on_pl6_from_N = nearest_point_on_line(pl6, junc_N)
-    join_on_pl6_to_M   = nearest_point_on_line(pl6, junc_M)
+    join_on_pl6_to_M = nearest_point_on_line(pl6, junc_M)
     seg6 = segment_along_line(pl6, join_on_pl6_from_N, join_on_pl6_to_M)
 
     # from pl6 into plM to END
@@ -381,24 +416,34 @@ def build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlo
             seg6 = [pt for pt in pl6 if pt[1] >= END_LATLON[1]]
         return dedup_consecutive([START_LATLON] + segN[1:] + seg6[1:] + [END_LATLON])
 
-    if (start_name == "polygon_1" or start_name == "polygon_2" or start_name == "polygon_3") and (end_name == "polygon_1" or end_name == "polygon_2" or end_name == "polygon_3"):
+    if (
+        start_name == "polygon_1"
+        or start_name == "polygon_2"
+        or start_name == "polygon_3"
+    ) and (
+        end_name == "polygon_1" or end_name == "polygon_2" or end_name == "polygon_3"
+    ):
 
         return dedup_consecutive([START_LATLON] + segN[1:] + segM[1:-1] + [END_LATLON])
 
-    #print("lat point",segM[-1][1])
+    # print("lat point",segM[-1][1])
 
     # assemble (avoid duplicating touching points)
     route = [START_LATLON] + segN[1:] + seg6[1:] + segM[1:-1] + [END_LATLON]
     return dedup_consecutive(route)
 
-def build_route_port_aware_Rhein(START_LATLON, END_LATLON,
-                           polys_lonlat, ports_latlon, centerline_latlon):
+
+def build_route_port_aware_Rhein(
+    START_LATLON, END_LATLON, polys_lonlat, ports_latlon, centerline_latlon
+):
     start_in, _ = point_in_port_polygons(START_LATLON, polys_lonlat)
-    end_in,   _ = point_in_port_polygons(END_LATLON,   polys_lonlat)
+    end_in, _ = point_in_port_polygons(END_LATLON, polys_lonlat)
 
     # NEW: if both inside → stay on the port network only
     if start_in and end_in:
-        return build_route_port_to_port(START_LATLON, END_LATLON, polys_lonlat, ports_latlon)
+        return build_route_port_to_port(
+            START_LATLON, END_LATLON, polys_lonlat, ports_latlon
+        )
 
     # If end is inside a port polygon (and start is not), flip S/E temporarily
     flipped = end_in and not start_in
@@ -415,6 +460,7 @@ def build_route_port_aware_Rhein(START_LATLON, END_LATLON,
 
     return route
 
+
 def offset_polyline_latlon(seq_latlon, offset_m=30.0, side="left"):
     """
     Offset a [lat,lon] polyline by `offset_m` meters to the 'left' or 'right'
@@ -428,16 +474,16 @@ def offset_polyline_latlon(seq_latlon, offset_m=30.0, side="left"):
     transformer_fwd = Transformer.from_crs("EPSG:4326", "EPSG:32632", always_xy=True)
     transformer_inv = Transformer.from_crs("EPSG:32632", "EPSG:4326", always_xy=True)
 
-    to_utm   = lambda x, y, z=None: transformer_fwd.transform(x, y)
+    to_utm = lambda x, y, z=None: transformer_fwd.transform(x, y)
     to_wgs84 = lambda x, y, z=None: transformer_inv.transform(x, y)
 
     # 3) Project to meters, offset, and pick the longest piece if it splits
     line_xy = transform(to_utm, line_ll)
     off = line_xy.parallel_offset(
         distance=offset_m,
-        side=side,                   # 'left' or 'right'
-        join_style=JOIN_STYLE.round, # smoother corners; try .mitre or .bevel if you prefer
-        resolution=16                # higher = smoother arcs around bends
+        side=side,  # 'left' or 'right'
+        join_style=JOIN_STYLE.round,  # smoother corners; try .mitre or .bevel if you prefer
+        resolution=16,  # higher = smoother arcs around bends
     )
 
     if isinstance(off, MultiLineString):
@@ -468,18 +514,17 @@ def lineofsight_Cuxhaven(START_LATLON, END_LATLON, centerline_latlon):
     if use_reverse:
         centerline_latlon = centerline_latlon[::-1]
 
-    simulation_path.extend(
-        [pt for pt in centerline_latlon
-         if y_min <= pt[1] <= y_max]
-    )
+    simulation_path.extend([pt for pt in centerline_latlon if y_min <= pt[1] <= y_max])
     simulation_path.append(END_LATLON)
     return dedup_consecutive(simulation_path)
 
+
 def latlon_to_xy(lat, lon):
-        R = 6371000
-        x = math.radians(lon) * R * math.cos(math.radians(lat))
-        y = math.radians(lat) * R
-        return x, y
+    R = 6371000
+    x = math.radians(lon) * R * math.cos(math.radians(lat))
+    y = math.radians(lat) * R
+    return x, y
+
 
 def signed_cte_to_segment(point_latlon, seg_a_latlon, seg_b_latlon):
     """
@@ -496,13 +541,14 @@ def signed_cte_to_segment(point_latlon, seg_a_latlon, seg_b_latlon):
         return 0.0
 
     # projection of P onto the (infinite) line AB
-    u = ((px - x1) * dx + (py - y1) * dy) / (dx*dx + dy*dy)
+    u = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)
     proj_x = x1 + u * dx
     proj_y = y1 + u * dy
 
     cte = math.hypot(px - proj_x, py - proj_y)
     cross = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
     return float(np.sign(cross)) * cte
+
 
 def first_cte(start_latlon, simulation_path):
     """
@@ -515,8 +561,10 @@ def first_cte(start_latlon, simulation_path):
     p2 = simulation_path[2]
     return signed_cte_to_segment(start_latlon, p1, p2)
 
+
 # %% [markdown]
 # ### Load the parameters
+
 
 # %%
 class ShipParameters:
@@ -525,47 +573,47 @@ class ShipParameters:
         self.rho_water = 1000  # kg/m³
 
         # Propeller parameters
-        self.D = 3.0            # diameter [m]
-        self.KT = 0.3           # thrust coefficient
+        self.D = 3.0  # diameter [m]
+        self.KT = 0.3  # thrust coefficient
         self.target_n_rpm = 180  # target rpm
-        self.n_rpm = 0         # start from 0
-        self.n = 0.0             # rev/s, will update during simulation
+        self.n_rpm = 0  # start from 0
+        self.n = 0.0  # rev/s, will update during simulation
 
         # Rudder parameters
-        self.AR = 15            # area [m²]
-        self.CL = 0.8           # lift coefficient
-        self.CD_rudder = 0.02   # drag coefficient
-        self.delta_deg = 0    # rudder angle in degrees
+        self.AR = 15  # area [m²]
+        self.CL = 0.8  # lift coefficient
+        self.CD_rudder = 0.02  # drag coefficient
+        self.delta_deg = 0  # rudder angle in degrees
         self.delta = np.radians(self.delta_deg)
 
         # Initial state
-        self.u = 2.0            # surge velocity
-        self.v = 0.0            # sway velocity
-        self.r = 0.0            # yaw rate
+        self.u = 2.0  # surge velocity
+        self.v = 0.0  # sway velocity
+        self.r = 0.0  # yaw rate
 
-        self.x = initial_x      # user input
+        self.x = initial_x  # user input
         self.y = initial_y
         self.psi = np.radians(heading_deg)
 
         # Ship parameters
-        self.mass = 6_500_000   # kg
-        self.Iz = 4e8           # yaw moment of inertia
-        self.xR = 60.0          # rudder distance from CG [m]
+        self.mass = 6_500_000  # kg
+        self.Iz = 4e8  # yaw moment of inertia
+        self.xR = 60.0  # rudder distance from CG [m]
 
         # Drag
-        self.S = 4000           # wetted surface [m²]
-        self.CD = 0.002         # hull drag coeff
+        self.S = 4000  # wetted surface [m²]
+        self.CD = 0.002  # hull drag coeff
 
-        self.tp = 0.15          # Thrust deduction factor
-        self.w = 0.15           # Wake fraction
-
+        self.tp = 0.15  # Thrust deduction factor
+        self.w = 0.15  # Wake fraction
 
         # Simulation
-        self.dt = 1           # time step [s]
+        self.dt = 1  # time step [s]
 
 
 # %% [markdown]
 # ### Calculate the forces
+
 
 # %%
 def calculate_J(params):
@@ -592,17 +640,21 @@ def calculate_propeller_force(params):
     XP = (1 - params.tp) * TP  # Surge contribution
     return XP
 
+
 def calculate_drag_force(params):
     return 0.5 * params.rho_water * params.S * params.CD * params.u**2
+
 
 def CL_of_delta(delta_rad):
     CL_slope = 6.0  # Lift slope (per radian)
     return CL_slope * delta_rad
 
+
 def CD_of_delta(delta_rad):
     CD0 = 0.02
     k = 2.5
     return CD0 + k * delta_rad**2
+
 
 def calculate_rudder_forces(params):
     params.delta = np.clip(params.delta, -np.radians(35), np.radians(35))
@@ -621,6 +673,7 @@ def calculate_rudder_forces(params):
     NR = YR * params.xR
 
     return XR, YR, NR
+
 
 def calculate_wind_forces(params, vw, theta_w):
     """
@@ -647,6 +700,7 @@ def calculate_wind_forces(params, vw, theta_w):
 
     return Xw, Yw, Nw
 
+
 def calculate_current_forces(params, Uc, theta_c):
     """
     Uc: current speed (m/s)
@@ -660,8 +714,8 @@ def calculate_current_forces(params, Uc, theta_c):
     uc_sway = Uc * np.sin(theta_c_rad - params.psi)
 
     # Parameters (tune if needed)
-    A_surge_c = 25     # frontal underwater area
-    A_sway_c = 75     # side underwater area
+    A_surge_c = 25  # frontal underwater area
+    A_sway_c = 75  # side underwater area
     CD_current = 0.6
     rho_water = params.rho_water
 
@@ -676,6 +730,7 @@ def calculate_current_forces(params, Uc, theta_c):
 # %% [markdown]
 # ### Calculating the heading
 
+
 # %%
 def calculate_bearing(pointA, pointB):
     """
@@ -687,27 +742,34 @@ def calculate_bearing(pointA, pointB):
     d_lon = lon2 - lon1
 
     x = math.sin(d_lon) * math.cos(lat2)
-    y = math.cos(lat1)*math.sin(lat2) - math.sin(lat1)*math.cos(lat2)*math.cos(d_lon)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(
+        d_lon
+    )
 
     bearing = math.atan2(x, y)
     return (math.degrees(bearing) + 360) % 360
 
+
 # REPLACE your get_wind_data() with this
-def get_wind_data(lat, lon, api_key, _cache={"t": -1, "val": (0.0, 0.0)}):
+def get_wind_data(lat, lon, api_key=None, _cache={"t": -1, "val": (0.0, 0.0)}):
     """
     Returns (wind_speed m/s, wind_direction deg FROM North).
     Caches the last successful value and falls back if the API call fails.
+    If no API key is provided, returns calm wind.
     """
-    url = "http://api.openweathermap.org/data/2.5/weather"
-    params = {'lat': lat, 'lon': lon, 'appid': api_key, 'units': 'metric'}
+    if not api_key:
+        return _cache["val"]
+
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    params = {"lat": lat, "lon": lon, "appid": api_key, "units": "metric"}
 
     try:
         resp = requests.get(url, params=params, timeout=5)
         resp.raise_for_status()
         data = resp.json()
-        w = data.get('wind', {})
-        speed = float(w.get('speed', 0.0))
-        direction = float(w.get('deg', 0.0))
+        w = data.get("wind", {})
+        speed = float(w.get("speed", 0.0))
+        direction = float(w.get("deg", 0.0))
         _cache["val"] = (speed, direction)
         return _cache["val"]
     except Exception:
@@ -718,16 +780,16 @@ def get_wind_data(lat, lon, api_key, _cache={"t": -1, "val": (0.0, 0.0)}):
 # %% [markdown]
 # ### Simulation
 
+
 # %%
-def simulate_motion(params, simulation_path, final_x, final_y):
+def simulate_motion(params, simulation_path, final_x, final_y, weather_api_key=None):
     # Control parameters
-    k = 5                      # Lower k → more aggressive rudder response
+    k = 5  # Lower k → more aggressive rudder response
     max_rudder_deg = 35
     ramp_duration_sec = 60
-    cte_gain = 2               # Increased to strengthen lateral correction
+    cte_gain = 2  # Increased to strengthen lateral correction
     cte_switch_threshold = 10  # Require small CTE before switching waypoint
     dt = params.dt
-
 
     # Tracking
     x_hist, y_hist = [params.x], [params.y]
@@ -737,10 +799,10 @@ def simulate_motion(params, simulation_path, final_x, final_y):
     last_pos = (params.x, params.y)
     log_data = {}  # step-indexed dictionary
 
-
-    # Wind data (optional, can be replaced with actual API call)
-    api_key = "6c77c4bd0f7280bf206a277dc5407cab"
-    vw, theta_w = get_wind_data(params.x, params.y, api_key)  # wind speed & direction in degrees
+    # Wind data is optional; if no key is provided the simulation uses calm wind.
+    vw, theta_w = get_wind_data(
+        params.x, params.y, weather_api_key
+    )  # wind speed & direction in degrees
 
     final_point = [final_x, final_y]
     max_steps = 20000  # Safety cap
@@ -750,9 +812,8 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         time_elapsed_sec = step * dt
 
         # Update wind data every 5 minutes
-        if step % 300 == 0:  # Every 5 minutes (if dt=1s)
-            vw, theta_w = get_wind_data(params.x, params.y, api_key)
-
+        if weather_api_key and step % 300 == 0:  # Every 5 minutes (if dt=1s)
+            vw, theta_w = get_wind_data(params.x, params.y, weather_api_key)
 
         # Termination condition: within 5 meters of final point
 
@@ -774,7 +835,7 @@ def simulate_motion(params, simulation_path, final_x, final_y):
             # Heading error
             current_pos = (params.x, params.y)
             bearing = calculate_bearing(current_pos, current_ref)
-            required_heading = (90-bearing) % 360
+            required_heading = (90 - bearing) % 360
             current_heading = np.degrees(params.psi) % 360
 
             heading_error = required_heading - current_heading
@@ -785,7 +846,7 @@ def simulate_motion(params, simulation_path, final_x, final_y):
 
             # Cross-track error
             if ref_idx + 1 < len(simulation_path):
-                p1 = simulation_path[ref_idx-1]
+                p1 = simulation_path[ref_idx - 1]
                 p2 = simulation_path[ref_idx]
             else:
                 p1 = simulation_path[ref_idx - 1]
@@ -802,8 +863,8 @@ def simulate_motion(params, simulation_path, final_x, final_y):
                 u = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)
                 proj_x = x1 + u * dx
                 proj_y = y1 + u * dy
-                cte = ((px - proj_x)**2 + (py - proj_y)**2)**0.5
-                cross = (x2 - x1)*(py - y1) - (y2 - y1)*(px - x1)
+                cte = ((px - proj_x) ** 2 + (py - proj_y) ** 2) ** 0.5
+                cross = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
                 cte *= np.sign(cross)
 
             cte_hist.append(cte)
@@ -827,11 +888,10 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         Fd = calculate_drag_force(params)
         XR, YR, NR = calculate_rudder_forces(params)
         Xw, Yw, Nw = calculate_wind_forces(params, vw, theta_w)
-        Uc = 0.7       # Current speed [m/s]
+        Uc = 0.7  # Current speed [m/s]
         theta_c = 200  # Current FROM 200° → towards 20°
 
         Xc, Yc, Nc = calculate_current_forces(params, Uc, theta_c)
-
 
         # Motion update
         a_surge = (Fp - Fd + XR + Xw + Xc) / params.mass
@@ -852,7 +912,9 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         dy = (params.u * np.sin(params.psi) + params.v * np.cos(params.psi)) * dt
         move_dist = math.hypot(dx, dy)
         move_bearing = math.degrees(math.atan2(dx, dy))
-        new_point = geodesic(meters=move_dist).destination((params.x, params.y), move_bearing)
+        new_point = geodesic(meters=move_dist).destination(
+            (params.x, params.y), move_bearing
+        )
 
         params.x = new_point.latitude
         params.y = new_point.longitude
@@ -865,10 +927,7 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         moved = geodesic(last_pos, (params.x, params.y)).meters
         last_pos = (params.x, params.y)
 
-        if (
-            distance_to_ref < 30
-            and ref_idx + 1 < len(simulation_path)
-        ):
+        if distance_to_ref < 30 and ref_idx + 1 < len(simulation_path):
             ref_idx += 1
             current_ref = simulation_path[ref_idx]
 
@@ -882,6 +941,7 @@ def simulate_motion(params, simulation_path, final_x, final_y):
         }
 
     return x_hist, y_hist, params, log_data
+
 
 # %% [markdown]
 # ### Calculate the position
@@ -899,118 +959,124 @@ def simulate_motion(params, simulation_path, final_x, final_y):
 # 49.059622253815526, 8.315441397005404
 
 # %%
-startpoint1 = (49.017087978567886, 8.341600846388104)
-startpoint2 = (49.01523822744541, 8.343634229579962)
-startpoint3 = (49.01266117029529, 8.34123956807622)
-startpoint4 = (49.01024187194236, 8.334449303849912)
-startpoint5 = (49.01024138870616, 8.325644980518295)
-startpoint6 = (49.01627625001881, 8.319671060136777)
-startpoint7 = (48.9651, 8.2292)
-startpointcux1 = (53.8064561, 9.3731867)
-startpointcux2 = (53.8792897, 9.2252189)
-startpointcux3 = (53.88451994353215, 9.202596624763625)
+if __name__ == "__main__":
+    startpoint1 = (49.017087978567886, 8.341600846388104)
+    startpoint2 = (49.01523822744541, 8.343634229579962)
+    startpoint3 = (49.01266117029529, 8.34123956807622)
+    startpoint4 = (49.01024187194236, 8.334449303849912)
+    startpoint5 = (49.01024138870616, 8.325644980518295)
+    startpoint6 = (49.01627625001881, 8.319671060136777)
+    startpoint7 = (48.9651, 8.2292)
+    startpointcux1 = (53.8064561, 9.3731867)
+    startpointcux2 = (53.8792897, 9.2252189)
+    startpointcux3 = (53.88451994353215, 9.202596624763625)
 
-endpoint1 = (49.0037306052938, 8.291302915600077)
-endpoint2 = (49.06241185735494, 8.317942857252644)
-endpointcux1 = (53.8981733, 8.6948722)
-endpointcux2 = (53.8536148, 9.0010887)
-endpointcux3 = (53.84373588009833, 8.97434706875069)
+    endpoint1 = (49.0037306052938, 8.291302915600077)
+    endpoint2 = (49.06241185735494, 8.317942857252644)
+    endpointcux1 = (53.8981733, 8.6948722)
+    endpointcux2 = (53.8536148, 9.0010887)
+    endpointcux3 = (53.84373588009833, 8.97434706875069)
 
-# %%
-START_LATLON =  startpoint3
-END_LATLON   = startpoint6
-Location = "Rheinhafen"
+    START_LATLON = startpoint3
+    END_LATLON = startpoint6
+    Location = "Rheinhafen"
 
-if Location == "Rheinhafen":
-    line = build_route_port_aware_Rhein(START_LATLON, END_LATLON,polys_lonlat, ports_latlon, Rheinhafen_centerline_latlon)
-elif Location == "Cuxhaven":
-    line =  lineofsight_Cuxhaven(START_LATLON, END_LATLON, Cuxhaven_centerline_latlon)
+    if Location == "Rheinhafen":
+        line = build_route_port_aware_Rhein(
+            START_LATLON,
+            END_LATLON,
+            polys_lonlat,
+            ports_latlon,
+            Rheinhafen_centerline_latlon,
+        )
+    elif Location == "Cuxhaven":
+        line = lineofsight_Cuxhaven(
+            START_LATLON, END_LATLON, Cuxhaven_centerline_latlon
+        )
 
-cte0 = first_cte(START_LATLON, line)
-line.remove(line[0])
-line.remove(line[-2])
-line.remove(line[-1])
+    cte0 = first_cte(START_LATLON, line)
+    line.remove(line[0])
+    line.remove(line[-2])
+    line.remove(line[-1])
 
-if cte0 > 0:
-    side = "left"
-else:
-    side = "right"
+    if cte0 > 0:
+        side = "left"
+    else:
+        side = "right"
 
-if Location == "Rheinhafen":
-    line_offset = [START_LATLON] + offset_polyline_latlon(line, offset_m=abs(20), side="right") + [END_LATLON]
-elif Location == "Cuxhaven":
-    line_offset = [START_LATLON] + offset_polyline_latlon(line, offset_m=abs(cte0), side=side) + [END_LATLON]
+    if Location == "Rheinhafen":
+        line_offset = (
+            [START_LATLON]
+            + offset_polyline_latlon(line, offset_m=abs(20), side="right")
+            + [END_LATLON]
+        )
+    elif Location == "Cuxhaven":
+        line_offset = (
+            [START_LATLON]
+            + offset_polyline_latlon(line, offset_m=abs(cte0), side=side)
+            + [END_LATLON]
+        )
 
+    simulation_path = line_offset
 
+    # Reduce the reference path
+    reduced_path = simulation_path[::1]
 
+    initial_heading_deg = (
+        90 - calculate_bearing([START_LATLON[0], START_LATLON[1]], reduced_path[1])
+    ) % 360
 
-# %%
+    # Initialize parameters
+    params = ShipParameters(START_LATLON[0], START_LATLON[1], initial_heading_deg)
 
-simulation_path = line_offset
+    # Run simulation
+    x_traj, y_traj, final_params, log_data = simulate_motion(
+        params, reduced_path, END_LATLON[0], END_LATLON[1]
+    )
 
+    # 1. Define start location for map center
+    start_location = [x_traj[0], y_traj[0]]
+    m = folium.Map(location=start_location, zoom_start=14)
 
+    # 2. Create trajectory path (ship motion path)
+    trajectory = list(zip(x_traj, y_traj))
 
-# %%
-# Reduce the reference path
-reduced_path = simulation_path[::1]
-
-initial_heading_deg = (90-calculate_bearing([START_LATLON[0],START_LATLON[1]], reduced_path[1])) % 360
-
-# Initialize parameters
-params = ShipParameters(START_LATLON[0],START_LATLON[1], initial_heading_deg)
-
-# Run simulation
-x_traj, y_traj, final_params, log_data = simulate_motion(params, reduced_path, END_LATLON[0], END_LATLON[1])
-
-
-
-# %% [markdown]
-# ### Ploting the position using Folium
-
-# %%
-# 1. Define start location for map center
-start_location = [x_traj[0], y_traj[0]]
-m = folium.Map(location=start_location, zoom_start=14)
-
-# 2. Create trajectory path (ship motion path)
-trajectory = list(zip(x_traj, y_traj))
-
-# 3. Add simulated trajectory to map
-folium.PolyLine(
-    locations=trajectory,
-    color="blue",
-    weight=3,
-    opacity=0.7,
-    tooltip="Simulated Ship Path"
-).add_to(m)
-
-# 4. Add start and end markers for trajectory
-folium.Marker(location=trajectory[0], popup="Start", icon=folium.Icon(color='green')).add_to(m)
-folium.Marker(location=trajectory[-1], popup="End", icon=folium.Icon(color='red')).add_to(m)
-
-# 5. Add reference path (simulation_path)
-folium.PolyLine(
-    locations=simulation_path,
-    color="purple",
-    weight=2,
-    opacity=0.7,
-    tooltip="Reference Path (simulation_path)"
-).add_to(m)
-
-# 6. Optionally: add marker at each reference point
-for idx, point in enumerate(simulation_path):
-    folium.CircleMarker(
-        location=point,
-        radius=2,
-        color="purple",
-        fill=True,
-        fill_opacity=0.7,
-        popup=f"Ref {idx}"
+    # 3. Add simulated trajectory to map
+    folium.PolyLine(
+        locations=trajectory,
+        color="blue",
+        weight=3,
+        opacity=0.7,
+        tooltip="Simulated Ship Path",
     ).add_to(m)
 
-# 7. Display the map
-m
+    # 4. Add start and end markers for trajectory
+    folium.Marker(
+        location=trajectory[0], popup="Start", icon=folium.Icon(color="green")
+    ).add_to(m)
+    folium.Marker(
+        location=trajectory[-1], popup="End", icon=folium.Icon(color="red")
+    ).add_to(m)
 
+    # 5. Add reference path (simulation_path)
+    folium.PolyLine(
+        locations=simulation_path,
+        color="purple",
+        weight=2,
+        opacity=0.7,
+        tooltip="Reference Path (simulation_path)",
+    ).add_to(m)
 
+    # 6. Optionally: add marker at each reference point
+    for idx, point in enumerate(simulation_path):
+        folium.CircleMarker(
+            location=point,
+            radius=2,
+            color="purple",
+            fill=True,
+            fill_opacity=0.7,
+            popup=f"Ref {idx}",
+        ).add_to(m)
 
-
+    # 7. Display the map
+    m

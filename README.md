@@ -1,8 +1,26 @@
-# p5-Simulation and Analysis of Ship Trajectories
-
 # Simulation and Analysis of Ship Trajectories
 
-# Description
+## Project Team
+
+- Aishwarya Chincholi Vasant Madhav
+- Nishanth Battu
+- Vineet Agarwal
+
+## Mentor
+
+- Taruna Tiwari
+
+## Project Milestones Summary
+
+- **M1: Planning and Literature Review (Early May 2025, 2 weeks)**: All three team members reviewed literature on ship trajectory prediction, physics-based maneuvering models, AIS-based environmental analysis, and data-driven approaches.
+- **M2: AIS Data EDA and Git Setup (Mid-May to Late May 2025, 3 weeks)**: All three members contributed to initial EDA. Aishwarya set up the GitHub repository, supported data cleaning, and analyzed environmental factors.
+- **M3: Model Creation and Simulation (Early June to Early July 2025, 5 weeks)**: Nishanth developed the physics-based ship motion model. Aishwarya developed the line-of-sight planning logic used by the model.
+- **M4: Model Validation (Early July to Mid-July 2025, 2 weeks)**: Nishanth led model validation, while Vineet validated edge cases across different start and end point scenarios.
+- **M5: UI Refinement and Interactive Map (Mid-July to Mid-August 2025, 4 weeks)**: Vineet developed the interactive UI and map-based simulation workflow.
+- **M6: Evaluation and Refinement (Mid-August to Late August 2025, 2 weeks)**: Aishwarya and Nishanth evaluated and refined the physics-based model against ground-truth AIS trajectories, while Vineet refined the UI based on model updates.
+- **M7: Scientific Writing, Reporting, and Presentation (June to September 2025, parallel)**: All three members documented their respective work. Vineet proofread and maintained the overall report structure and tone.
+
+## Description
 A sophisticated simulation framework for ship trajectory modeling that combines physics-based dynamics with historical Automatic Identification System (AIS) data to replicate realistic vessel behavior under varying environmental conditions. This hybrid approach bridges theoretical modeling with practical data-driven insights to advance maritime intelligence and safety.
 
 Core Purpose: Understanding and predicting maritime vessel movement is critical for ensuring navigational safety, efficient port operations, and effective environmental oversight. Our framework addresses this need by integrating real-world navigation patterns with environmental variables to create highly realistic ship behavior simulations.
@@ -15,9 +33,49 @@ Historical AIS data analysis for weather impact
 
 Environmental variable integration for condition-specific performance. 
 
-# Weather Data analysis
+## Streamlit App Deployment
 
-Folder Analysis has two files each for Rheinhaven and Cuxhaven- Cuxhaven analysis.ipynb and Rheinhaven analysis.ipynb.
+The Streamlit app entrypoint for deployment is:
+
+```text
+streamlit_app.py
+```
+
+You can deploy this repository directly from GitHub on Streamlit Community Cloud. A dev container is not required for hosting.
+
+### Optional: Enable live wind data
+
+The app can use OpenWeather live wind data when an API key is available. If no key is configured, the simulation falls back to calm wind.
+
+For Streamlit Community Cloud, add this secret in your app settings:
+
+```toml
+OPENWEATHER_API_KEY = "your_openweather_api_key"
+```
+
+For local development, create:
+
+```text
+.streamlit/secrets.toml
+```
+
+You can copy the format from:
+
+```text
+.streamlit/secrets.toml.example
+```
+
+### Visible authorship in the deployed app
+
+The deployed Streamlit UI explicitly shows the project team so all contributors are credited in the app itself, independent of GitHub contributor graph behavior.
+
+## Weather Data analysis
+
+The `Analysis/` folder contains:
+
+- `Analysis/Cuxhaven analysis.ipynb`
+- `Analysis/Rheinhaven analysis.ipynb`
+
 The Jupyter Notebook analyzes ship Speed Over Ground (SOG) performance and ship size pattern under various environmental hindrance conditions (wind and current) for different navigation directions.
 
 ## Features
@@ -34,26 +92,32 @@ The Jupyter Notebook analyzes ship Speed Over Ground (SOG) performance and ship 
 
 ## Requirements
 
+```bash
 pip install mysql-connector-python pandas numpy seaborn matplotlib
+```
 
 ## Database Configuration
 
+```python
 db_config = {
     "host": "localhost",
     "user": "root", 
-    "password": "AMS_ship_traj03",
+    "password": "your_password_here",
     "database": "ship_data",
 }
+```
 
-# Evaluation of physics based ship trajectory model
+## Evaluation of physics based ship trajectory model
 A complete pipeline for analyzing ship path following performance, from data preparation to simulation comparison.
 
-ystem Overview
+Note: The evaluation scripts depend on a local MySQL/database setup and the required input data files. The documentation in this README is aligned with the current repository structure, but those scripts will only run when the local database configuration and source data are available.
+
+## System Overview
 
 This system consists of two main components:
 
-1. **File 1: Data Preparation Script** (`CLRB_Data_prep.py`) - Loads and processes historic ship tracks from database
-2. **File 2: Analysis Tool** (`CRLB_Simulation.py`) - Compares simulated paths against historic references
+1. **File 1: Data Preparation Script** (`Evaluation/CRLB_Data_prep.py`) - Loads and processes historic ship tracks from database
+2. **File 2: Analysis Tool** (`Evaluation/CRLB_Simulation.py`) - Compares simulated paths against historic references
 
 ## Quick Start
 
@@ -63,20 +127,22 @@ pip install numpy pandas scipy matplotlib folium shapely mysql-connector-python
 ```
 
 ### 2. Run Data Preparation (File 1)
-```python
-# Modify database credentials in CLRB_Data_prep.py
-python CLRB_Data_prep.py
+```bash
+# Run from the repository root
+# Modify database credentials in Evaluation/CRLB_Data_prep.py
+python Evaluation/CRLB_Data_prep.py
 ```
 **Output**: `prepared_historic_tracks.npz`, `track_summary.csv`
 
 ### 3. Run Path Analysis (File 2)
-```python
-# Modify simulation file paths in CRLB_Simulation.py 
-python CRLB_Simulation.py
+```bash
+# Run from the repository root
+# Modify simulation file paths in Evaluation/CRLB_Simulation.py
+python Evaluation/CRLB_Simulation.py
 ```
 **Output**: Performance metrics, visualizations, and comparison reports
 
-## File 1: Data Preparation Script (`CLRB_Data_prep.py`)
+## File 1: Data Preparation Script (`Evaluation/CRLB_Data_prep.py`)
 
 ### Purpose
 Loads historic ship tracks from MySQL database and prepares them for analysis.
@@ -97,7 +163,7 @@ Loads historic ship tracks from MySQL database and prepares them for analysis.
 db_config = {
     "host": "localhost",
     "user": "root", 
-    "password": "AMS_ship_traj03",
+    "password": "your_password_here",
     "database": "ship_data",
 }
 
@@ -137,7 +203,7 @@ Each track contains:
 
 ---
 
-## File 2: Path Evaluation (`CRLB_Simulation.py`)
+## File 2: Path Evaluation (`Evaluation/CRLB_Simulation.py`)
 
 ### Purpose
 Compares simulated ship paths against prepared historic tracks and evaluates performance.
@@ -198,8 +264,8 @@ simulation_files = {
 
 ## Complete Workflow
 
-1. **Prepare Historic Data**: Run `CLRB_Data_prep.py` to load and process database tracks
+1. **Prepare Historic Data**: Run `Evaluation/CRLB_Data_prep.py` to load and process database tracks
 2. **Generate Simulations**: Run your controller to produce simulation JSON files
-3. **Analyze Performance**: Run `CRLB_Simulation.py` to compare simulations against historic data
+3. **Analyze Performance**: Run `Evaluation/CRLB_Simulation.py` to compare simulations against historic data
 4. **Review Results**: Check CSV reports, interactive maps, and console assessments
 5. **Debug Issues**: Use built-in debugging tools for problematic comparisons
