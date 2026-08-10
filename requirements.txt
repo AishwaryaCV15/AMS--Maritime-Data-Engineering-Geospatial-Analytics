@@ -1,0 +1,21 @@
+# Core app
+streamlit>=1.31
+streamlit-folium>=0.17
+plotly>=5.24
+
+# Data & numerics
+numpy>=1.26
+pandas>=2.2
+scipy>=1.13
+
+# Geospatial stack
+shapely>=2.0
+pyproj>=3.6
+geopy>=2.4
+folium>=0.15
+overpy>=0.7
+
+# Misc
+requests>=2.31
+ipython>=8.10
+matplotlib>=3.8
