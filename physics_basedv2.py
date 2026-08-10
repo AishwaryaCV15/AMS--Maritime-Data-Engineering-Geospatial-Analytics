@@ -3,24 +3,15 @@
 
 # %%
 import json
-import numpy as np
-import pandas as pd
-from datetime import datetime
-import folium
 import math
-from scipy.interpolate import CubicSpline
-import matplotlib.pyplot as plt
-import overpy
-from geopy.distance import geodesic
-from geopy import Point
+
+import folium
+import numpy as np
 import requests
-from shapely.geometry import Point, Polygon, LineString
-from shapely.ops import substring, nearest_points
-from IPython.display import display
-from shapely.geometry import LineString, MultiLineString
-from shapely.ops import transform
-from shapely.geometry import JOIN_STYLE
+from geopy.distance import geodesic
 from pyproj import Transformer
+from shapely.geometry import JOIN_STYLE, LineString, MultiLineString, Point, Polygon
+from shapely.ops import nearest_points, substring, transform
 
 # %% [markdown]
 # ### Load Line of Sight
