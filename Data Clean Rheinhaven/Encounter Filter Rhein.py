@@ -9,7 +9,7 @@ import pymysql
 db_config = {
     "host": "localhost",
     "user": "root",
-    "password": "AMS_ship_traj03",
+    "password": "your_password_here",
     "database": "ship_data",
 }
 engine = create_engine(

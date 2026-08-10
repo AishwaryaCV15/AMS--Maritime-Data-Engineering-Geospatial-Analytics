@@ -10,7 +10,7 @@ def get_and_save_ais_data_to_table():
     db_config = {
         "host": "localhost",
         "user": "root",
-        "password": "AMS_ship_traj03",
+        "password": "your_password_here",
         "database": "ship_data",
     }
 
